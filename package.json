@@ -1,7 +1,7 @@
 {
   "name": "ayanokoji-bot",
   "version": "1.0.0",
-  "description": "Bot WhatsApp Ayanokoji par pairing code",
+  "description": "Bot WhatsApp Ayanokoji stable",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -13,3 +13,4 @@
     "qrcode-terminal": "^0.12.0"
   }
 }
+
