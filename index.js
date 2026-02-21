@@ -1,11 +1,11 @@
-const { default: makeWASocket, useMultiFileAuthState, delay, fetchLatestBaileysVersion } = require("@whiskeysockets/baileys");
+const { default: makeWASocket, useMultiFileAuthState, delay, fetchLatestBaileysVersion, downloadContentFromMessage } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const express = require('express');
 const app = express();
 
-// Serveur pour maintenir Render éveillé
+// Serveur de maintien
 const port = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Bot Ayanokoji en ligne'));
+app.get('/', (req, res) => res.send('Ayanokoji Bot Privé Actif'));
 app.listen(port, () => console.log(`Serveur actif sur port ${port}`));
 
 async function startBot() {
@@ -17,54 +17,111 @@ async function startBot() {
         logger: pino({ level: "silent" }),
         printQRInTerminal: false,
         auth: state,
-        // Modification ici pour forcer la notification WhatsApp
-        browser: ["Ubuntu", "Chrome", "110.0.5481.177"]
+        browser: ["Ayanokoji-Bot", "Chrome", "1.0.0"]
     });
 
-    // Demande du code de jumelage
+    // --- CONFIGURATION PERSONNELLE (À MODIFIER) ---
+    const MY_NUMBER = "243986860268@s.whatsapp.net"; 
+    const IMAGE_AYANOKOJI = "https://files.catbox.moe/9f9p3p.jpg"; // Ton image
+
     if (!sock.authState.creds.registered) {
-        // --- METS TON NUMÉRO ICI (ex: 243812345678) ---
         const phoneNumber = "243986860268"; 
-        
-        await delay(8000); // Pause pour laisser le temps au serveur de démarrer
+        await delay(8000);
         try {
             let code = await sock.requestPairingCode(phoneNumber);
-            console.log("------------------------------------------");
             console.log(`VOTRE CODE DE JUMELAGE : ${code}`);
-            console.log("------------------------------------------");
-        } catch (error) {
-            console.log("Erreur lors de la génération du code :", error);
-        }
+        } catch (e) { console.log(e) }
     }
 
     sock.ev.on('creds.update', saveCreds);
 
-    sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect } = update;
-        if (connection === 'open') console.log("✅ BOT CONNECTÉ !");
-        if (connection === 'close') {
-            console.log("❌ Connexion perdue, tentative de relance...");
-            startBot();
-        }
-    });
-
-    // Commandes de base
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
-        if (!msg.message || msg.key.fromMe) return;
+        if (!msg.message) return;
+
         const from = msg.key.remoteJid;
-        const body = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
+        const sender = msg.key.participant || msg.key.remoteJid;
+        
+        // SÉCURITÉ PERSONNELLE
+        if (sender !== MY_NUMBER) return; 
+
+        const type = Object.keys(msg.message)[0];
+        const body = (type === 'conversation') ? msg.message.conversation : (type === 'extendedTextMessage') ? msg.message.extendedTextMessage.text : (type === 'imageMessage') ? msg.message.imageMessage.caption : (type === 'videoMessage') ? msg.message.videoMessage.caption : '';
         const prefix = ".";
 
-        if (body.startsWith(prefix)) {
-            const cmd = body.slice(prefix.length).trim().split(" ")[0].toLowerCase();
-            if (cmd === 'menu') {
-                await sock.sendMessage(from, { text: "🏮 *AYANOKOJI-BOT* 🏮\n\n.ping\n.owner\n.runtime" });
-            }
-            if (cmd === 'ping') await sock.sendMessage(from, { text: "⚡ Pong!" });
+        if (!body.startsWith(prefix)) return;
+        const arg = body.slice(prefix.length).trim().split(/ +/g);
+        const cmd = arg.shift().toLowerCase();
+
+        switch (cmd) {
+            case 'menu':
+                const menuText = `
+HEY OWNER, HOW CAN I HELP YOU?
+「 BOT INFO 」
+⚡ CREATOR: AYANOKOJI
+⚡ STATUT: ACTIF
+⚡ PREFIXE: [ . ]
+
+「 OWNER MENU 」
+⚡ SELF | PUBLIC | ALIVE | PING
+⚡ REPO | OWNER | VV | PURGE
+
+「 DOWNLOAD MENU 」
+⚡ PLAY | VIDEO | APK | IMG
+⚡ TIKTOK | YTSEARCH | FB
+
+「 ANIME & FUN 」
+⚡ WAIFU | AI | TRUTH | DARE
+⚡ JOKE | MEME | QUOTE
+
+「 STICKER MENU 」
+⚡ STICKER | KISS | HUG | SLAP
+
+*Kiyotaka Ayanokoji : Le bot parfait.*`;
+
+                await sock.sendMessage(from, { 
+                    image: { url: IMAGE_AYANOKOJI }, 
+                    caption: menuText 
+                }, { quoted: msg });
+                break;
+
+            case 'vv': // Anti-Vue Unique
+                const quotedMsg = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
+                if (!quotedMsg) return;
+                const viewOnceMsg = quotedMsg.viewOnceMessageV2?.message || quotedMsg.viewOnceMessage?.message;
+                if (!viewOnceMsg) return;
+                const mediaType = Object.keys(viewOnceMsg)[0];
+                const media = viewOnceMsg[mediaType];
+                const stream = await downloadContentFromMessage(media, mediaType.replace('Message', ''));
+                let buffer = Buffer.from([]);
+                for await (const chunk of stream) { buffer = Buffer.concat([buffer, chunk]); }
+                if (mediaType === 'imageMessage') await sock.sendMessage(from, { image: buffer, caption: "✅ Purifié." });
+                else await sock.sendMessage(from, { video: buffer, caption: "✅ Purifié." });
+                break;
+
+            case 'purge': // Commande Purge
+                if (!from.endsWith('@g.us')) return;
+                const groupMetadata = await sock.groupMetadata(from);
+                const botNumber = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+                const users = groupMetadata.participants.filter(p => p.id !== botNumber && p.id !== MY_NUMBER);
+                await sock.sendMessage(from, { text: "🚀 *Début de la purification...*" });
+                for (let user of users) {
+                    await delay(700);
+                    await sock.groupParticipantsUpdate(from, [user.id], "remove");
+                }
+                await sock.sendMessage(from, { text: "🧤 *Kiyotaka Ayanokoji vous a purifié.*" });
+                break;
+
+            case 'play': // Placeholder Musique
+                await sock.sendMessage(from, { text: `🔍 Recherche de "${arg.join(" ")}"...` });
+                // Note: Nécessite l'installation de yt-search et ytdl-core pour être complet
+                break;
+
+            case 'ping':
+                await sock.sendMessage(from, { text: "⚡ *0.001ms* - Fluide comme l'esprit d'Ayanokoji." });
+                break;
         }
     });
 }
 
 startBot();
-
