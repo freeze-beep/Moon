@@ -3,10 +3,10 @@ const pino = require("pino");
 const express = require('express');
 const app = express();
 
-// --- SYSTÈME ANTI-SOMMEIL POUR RENDER ---
+// Serveur pour maintenir Render éveillé
 const port = process.env.PORT || 3000;
-app.get('/', (res) => res.send('Bot Ayanokoji Actif !'));
-app.listen(port, () => console.log(`Serveur de maintien sur le port ${port}`));
+app.get('/', (req, res) => res.send('Bot Ayanokoji en ligne'));
+app.listen(port, () => console.log(`Serveur actif sur port ${port}`));
 
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
@@ -17,35 +17,38 @@ async function startBot() {
         logger: pino({ level: "silent" }),
         printQRInTerminal: false,
         auth: state,
-        browser: ["Ubuntu", "Chrome", "20.0.04"]
+        // Modification ici pour forcer la notification WhatsApp
+        browser: ["Ubuntu", "Chrome", "110.0.5481.177"]
     });
 
-    // --- LOGIQUE DE JUMELAGE (PAIRING) ---
+    // Demande du code de jumelage
     if (!sock.authState.creds.registered) {
-        // REMPLACE LE NUMÉRO CI-DESSOUS (Exemple: 243...)
-        const phoneNumber = "243858944656"; 
+        // --- METS TON NUMÉRO ICI (ex: 243812345678) ---
+        const phoneNumber = "243986860268"; 
         
-        await delay(5000);
-        let code = await sock.requestPairingCode(phoneNumber);
-        console.log("------------------------------------------");
-        console.log(`VOTRE CODE DE JUMELAGE EST : ${code}`);
-        console.log("------------------------------------------");
+        await delay(8000); // Pause pour laisser le temps au serveur de démarrer
+        try {
+            let code = await sock.requestPairingCode(phoneNumber);
+            console.log("------------------------------------------");
+            console.log(`VOTRE CODE DE JUMELAGE : ${code}`);
+            console.log("------------------------------------------");
+        } catch (error) {
+            console.log("Erreur lors de la génération du code :", error);
+        }
     }
 
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
-        const { connection } = update;
-        if (connection === 'open') {
-            console.log("✅ BOT CONNECTÉ ET PRÊT !");
-        }
+        const { connection, lastDisconnect } = update;
+        if (connection === 'open') console.log("✅ BOT CONNECTÉ !");
         if (connection === 'close') {
-            console.log("❌ Connexion perdue, reconnexion...");
+            console.log("❌ Connexion perdue, tentative de relance...");
             startBot();
         }
     });
 
-    // --- SYSTÈME DE COMMANDES (MENU) ---
+    // Commandes de base
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
         if (!msg.message || msg.key.fromMe) return;
@@ -55,38 +58,10 @@ async function startBot() {
 
         if (body.startsWith(prefix)) {
             const cmd = body.slice(prefix.length).trim().split(" ")[0].toLowerCase();
-
-            switch (cmd) {
-                case 'menu':
-                    const menu = `
-╭───〖 *AYANOKOJI-BOT* 〗───
-│ 
-│ 👋 *Salut ! Voici mes commandes :*
-│ 
-│ 🛠️ *.ping* : Vitesse du bot
-│ 👤 *.owner* : Qui est mon maître ?
-│ 📊 *.runtime* : Temps de marche
-│ 💡 *.info* : À propos de moi
-│ 
-╰──────────────────────────`;
-                    await sock.sendMessage(from, { text: menu });
-                    break;
-
-                case 'ping':
-                    await sock.sendMessage(from, { text: "⚡ *Pong !* Je suis ultra rapide." });
-                    break;
-
-                case 'owner':
-                    await sock.sendMessage(from, { text: "Mon créateur est le grand Ayanokoji." });
-                    break;
-                
-                case 'runtime':
-                    const uptime = process.uptime();
-                    const hours = Math.floor(uptime / 3600);
-                    const minutes = Math.floor((uptime % 3600) / 60);
-                    await sock.sendMessage(from, { text: `📊 Je tourne depuis : ${hours}h ${minutes}m` });
-                    break;
+            if (cmd === 'menu') {
+                await sock.sendMessage(from, { text: "🏮 *AYANOKOJI-BOT* 🏮\n\n.ping\n.owner\n.runtime" });
             }
+            if (cmd === 'ping') await sock.sendMessage(from, { text: "⚡ Pong!" });
         }
     });
 }
