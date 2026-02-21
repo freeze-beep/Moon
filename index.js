@@ -17,7 +17,7 @@ async function startBot() {
         logger: pino({ level: "silent" }),
         printQRInTerminal: false,
         auth: state,
-        browser: ["Ayanokoji-Bot", "Chrome", "1.0.0"]
+        browser: ["Ayanokoji-Bot", "moon", "1.0.0"]
     });
 
     // --- CONFIGURATION PERSONNELLE (À MODIFIER) ---
